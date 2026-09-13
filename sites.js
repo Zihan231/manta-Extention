@@ -70,7 +70,7 @@ function buildMantaUrl(term, location, pageNum) {
   const params = new URLSearchParams({
     search: term,
     city, state, country,
-    page_size: '10', // 25 isn't honored past page 1 - pages then overlap and pagination stalls
+    page_size: '25', // NOTE: earlier testing showed Manta's backend not honoring this past page 1 (page 2 mostly re-served page 1) - watch for overlapping pages
     pg: String(page)
   });
   if (page > 1) {
@@ -88,10 +88,21 @@ const MANTA = {
   buildPageUrl: buildMantaUrl,
   // Some Manta pages also lazy-load a bit within a page, so we settle-scroll
   // briefly before extracting, then move to the next pg= value.
-  // maxPages is just a runaway-safety ceiling, not the expected page count -
-  // real scrapes should stop earlier via the "0 new rows added" check once
-  // Manta's actual results run out. 12 was cutting real result sets short.
-  pagination: { type: 'urlpage', maxPages: 100, waitMs: 1400, settleScrolls: 2 },
+  // maxPages is just a runaway-safety ceiling, not the expected page count.
+  pagination: { type: 'urlpage', maxPages: 300, waitMs: 1400, settleScrolls: 2 },
+  // Manta's search is ES-backed, and offset pagination on an unstable sort
+  // can return a long stretch of overlapping/duplicate pages even while
+  // more genuinely new results exist further on - so "did we extract any
+  // new rows" is not a reliable stop signal here (confirmed: it cut a real
+  // ~500+ result search short at page 53 while manta.com's own pagination
+  // control still showed pages 54, 55... beyond that). Manta's own
+  // pagination widget always links to pg=<current+1> when a further page
+  // genuinely exists, so treat that as the authoritative signal instead.
+  hasNextPage: (doc, currentPage) => {
+    const nextPageRe = new RegExp('[?&]pg=' + (currentPage + 1) + '(&|$)');
+    return Array.from(doc.querySelectorAll('a[href*="pg="]'))
+      .some(a => nextPageRe.test(a.getAttribute('href') || ''));
+  },
   extract: (doc) => {
     const anchors = Array.from(doc.querySelectorAll('a[href*="/c/"]'))
       .filter(a => /\/c\/[a-z0-9]+\//i.test(a.getAttribute('href') || ''));

@@ -119,19 +119,24 @@
     const maxPages = (adapter.pagination && adapter.pagination.maxPages) || 10;
     const pageNum = job.pageNum || 1;
 
-    // Offset-based pagination on an ES-backed search (which Manta's own
-    // pagination markup confirms it is) can return an occasional
-    // overlapping/duplicate page even when more genuinely new results
-    // exist further on - unstable sort ties, index changes mid-crawl, etc.
-    // Stopping on the very first zero-new-rows page was cutting real
-    // result sets short. Require a short streak of consecutive zero-new
-    // pages (mirrors the stableRounds check scrollAndCollect already uses
-    // for infinite-scroll sites) before concluding we're actually done.
-    const maxStaleStreak = (adapter.pagination && adapter.pagination.maxStaleStreak) || 3;
-    const staleStreak = pageNum > 1
-      ? (addedThisPage === 0 ? (job.staleStreak || 0) + 1 : 0)
-      : 0;
-    const reachedEnd = staleStreak >= maxStaleStreak || pageNum >= maxPages;
+    let reachedEnd;
+    let staleStreak = 0;
+    if (adapter.hasNextPage) {
+      // Trust the site's own pagination control over our row-count
+      // heuristic - see sites.js for why the heuristic alone is unreliable
+      // on Manta.
+      reachedEnd = !adapter.hasNextPage(document, pageNum) || pageNum >= maxPages;
+    } else {
+      // Fallback for adapters with no hasNextPage: require a short streak
+      // of consecutive zero-new-rows pages (mirrors the stableRounds check
+      // scrollAndCollect uses for infinite-scroll sites) before concluding
+      // we're actually done, since a single such page isn't always the end.
+      const maxStaleStreak = (adapter.pagination && adapter.pagination.maxStaleStreak) || 3;
+      staleStreak = pageNum > 1
+        ? (addedThisPage === 0 ? (job.staleStreak || 0) + 1 : 0)
+        : 0;
+      reachedEnd = staleStreak >= maxStaleStreak || pageNum >= maxPages;
+    }
 
     if (reachedEnd) {
       chrome.runtime.sendMessage({ type: 'TERM_DONE', term, location: location_, rows: accum });
