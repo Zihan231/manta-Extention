@@ -12,6 +12,22 @@ function findAdapterById(id) {
   return (globalThis.SITES || []).find(s => s.id === id);
 }
 
+// Reloading the extension (chrome://extensions -> reload, which fires
+// onInstalled) restarts this service worker with a fresh context, but any
+// already-open dashboard window keeps running its OLD JavaScript, whose
+// connection to the extension is now severed - clicks in that stale window
+// (Start, Stop, etc.) silently do nothing. Since panelWindowId is read from
+// storage (which survives the reload), openOrFocusPanel would otherwise
+// just re-focus that broken window instead of opening a working one. Close
+// it here so the next toolbar click is forced to create a fresh window.
+chrome.runtime.onInstalled.addListener(async () => {
+  const stored = await new Promise(r => chrome.storage.local.get('panelWindowId', d => r(d.panelWindowId)));
+  if (stored) {
+    try { await chrome.windows.remove(stored); } catch (e) {}
+    chrome.storage.local.remove('panelWindowId');
+  }
+});
+
 async function openOrFocusPanel() {
   const stored = await new Promise(r => chrome.storage.local.get('panelWindowId', d => r(d.panelWindowId)));
   if (stored) {
@@ -22,11 +38,27 @@ async function openOrFocusPanel() {
       // window no longer exists, fall through and create a new one
     }
   }
+
+  const width = 560;
+  const height = 840;
+  // No "system.display" permission is declared, so there's no direct way
+  // to ask for the actual screen size - centering against the current
+  // browser window's bounds is the closest approximation available and
+  // looks the same as centering on screen for the common case of a
+  // maximized browser window.
+  let left, top;
+  try {
+    const current = await chrome.windows.getLastFocused();
+    left = Math.max(0, Math.round(current.left + (current.width - width) / 2));
+    top = Math.max(0, Math.round(current.top + (current.height - height) / 2));
+  } catch (e) {
+    // Fall back to letting the OS place it.
+  }
+
   const win = await chrome.windows.create({
     url: chrome.runtime.getURL('dashboard.html'),
     type: 'popup',
-    width: 460,
-    height: 700
+    width, height, left, top
   });
   chrome.storage.local.set({ panelWindowId: win.id });
 }
@@ -41,9 +73,17 @@ chrome.action.onClicked.addListener(() => { openOrFocusPanel(); });
 // through this single chain so read-modify-write cycles never overlap
 // (two near-simultaneous messages clobbering each other was the earlier
 // "rows stuck at 0" bug).
+// NOTE: the error handler must be a .catch() on fn's own result, not the
+// second argument to .then(fn, ...) - that second argument only fires when
+// the PREVIOUS link in the chain rejected, not when fn itself throws. With
+// fn's own errors uncaught, a throw here (e.g. navigateToPair failing to
+// switch the tab to the next term/location) rejected `queue`, and the
+// *next* serial() call afterward silently got skipped instead of ever
+// running - which looked like "runs the first term, never tries the next
+// one" rather than the actual failure it was.
 let queue = Promise.resolve();
 function serial(fn) {
-  queue = queue.then(fn, (err) => { console.error(err); });
+  queue = queue.then(fn).catch((err) => { console.error(err); });
   return queue;
 }
 
@@ -60,7 +100,15 @@ async function navigateToPair(job) {
   if (adapter.id === 'generic') return; // scrapes whatever tab is already open
   const pair = job.queue[job.queueIndex];
   const url = adapter.buildSearchUrl(pair.term, pair.location);
-  await chrome.tabs.update(job.tabId, { url });
+  try {
+    await chrome.tabs.update(job.tabId, { url });
+  } catch (e) {
+    // Original tab is gone (closed manually, etc.) - open a new one rather
+    // than silently failing to advance to the next term/location.
+    const tab = await chrome.tabs.create({ url });
+    job.tabId = tab.id;
+    await setJob(job);
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg) => {

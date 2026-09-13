@@ -33,11 +33,16 @@ function render(job) {
   const configSection = document.getElementById('configSection');
   const startBtn = document.getElementById('start');
   const startHint = document.getElementById('startHint');
+  const stopBtn = document.getElementById('stop');
 
   const busy = !!job && (job.status === 'running' || job.status === 'paused');
   configSection.classList.toggle('busy', busy);
   startBtn.disabled = busy;
   startHint.textContent = busy ? 'A search is already running - Stop it to start a new one.' : '';
+  // Stop only ever does anything to a running job - keep it disabled the
+  // rest of the time so it's obvious clicking it did something (and can't
+  // be clicked again while the STOP message is still in flight).
+  stopBtn.disabled = !job || job.status !== 'running';
 
   if (!job) {
     badge.className = 'pill idle';
@@ -56,7 +61,13 @@ function render(job) {
 
   badge.className = 'pill ' + job.status;
   badgeText.textContent = job.status;
-  meta.textContent = `${job.site}`;
+  if (job.status === 'stopped') {
+    meta.textContent = `Stopped - ${job.results.length} lead${job.results.length === 1 ? '' : 's'} collected before stopping. Export below, or Start a new search.`;
+  } else if (job.status === 'done') {
+    meta.textContent = `Finished - ${job.results.length} lead${job.results.length === 1 ? '' : 's'} collected. Export below, or Start a new search.`;
+  } else {
+    meta.textContent = `${job.site}`;
+  }
 
   const pair = job.queue[job.queueIndex] || { term: 'finished', location: '' };
   term.textContent = `${Math.min(job.queueIndex + 1, job.queue.length)}/${job.queue.length} · ${pair.term}`;
@@ -102,15 +113,66 @@ function render(job) {
   }).join('');
 }
 
-function parseLines(raw) {
-  return raw.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+function slugify(s) {
+  return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
+
+// Builds a "list of single-line inputs + Add more button" control (used for
+// both search terms and locations instead of a multi-line textarea, so each
+// entry is its own clearly separate field).
+function makeDynList(containerId, addBtnId, placeholder) {
+  const container = document.getElementById(containerId);
+  const addBtn = document.getElementById(addBtnId);
+
+  function addRow(value) {
+    const row = document.createElement('div');
+    row.className = 'dyn-row';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    if (value) input.value = value;
+    row.appendChild(input);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'dyn-remove';
+    removeBtn.textContent = '×';
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', () => {
+      if (container.children.length > 1) row.remove();
+      else input.value = '';
+    });
+    row.appendChild(removeBtn);
+
+    container.appendChild(row);
+    return input;
+  }
+
+  addBtn.addEventListener('click', () => addRow('').focus());
+  addRow(''); // always start with one row
+
+  return {
+    // splitCommas: also split each field on commas (useful for terms -
+    // pasting "restaurants, dental, plumbers" into one box still works -
+    // but not for locations, where a comma is part of "City, State").
+    getValues(splitCommas) {
+      return Array.from(container.querySelectorAll('input'))
+        .map(i => i.value.trim())
+        .filter(Boolean)
+        .flatMap(v => splitCommas ? v.split(',').map(s => s.trim()).filter(Boolean) : [v]);
+    }
+  };
+}
+
+const termsList = makeDynList('termsList', 'addTerm', 'e.g. Roofing contractor');
+const locationsList = makeDynList('locationsList', 'addLocation', 'e.g. South San Francisco, CA');
 
 document.getElementById('start').addEventListener('click', async () => {
   const startHint = document.getElementById('startHint');
   const site = document.getElementById('site').value;
-  const terms = parseLines(document.getElementById('terms').value);
-  const locationLines = document.getElementById('locations').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const terms = termsList.getValues(true);
+  const locationLines = locationsList.getValues(false);
 
   if (terms.length === 0) {
     startHint.textContent = 'Enter at least one search term.';
@@ -131,7 +193,11 @@ document.getElementById('start').addEventListener('click', async () => {
   chrome.runtime.sendMessage({ type: 'START', site, queue: combinedQueue });
 });
 
-document.getElementById('stop').addEventListener('click', () => {
+document.getElementById('stop').addEventListener('click', (e) => {
+  // Disable immediately for instant feedback - render() will keep it
+  // disabled once job.status confirms the stop (or re-enable it if
+  // something went wrong and the job is still running).
+  e.currentTarget.disabled = true;
   chrome.runtime.sendMessage({ type: 'STOP' });
 });
 
@@ -154,9 +220,16 @@ document.getElementById('export').addEventListener('click', async () => {
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
+
+  const terms = [...new Set(job.queue.map(q => q.term))].map(slugify).filter(Boolean);
+  const locations = [...new Set(job.queue.map(q => q.location))].map(slugify).filter(Boolean);
+  const stamp = new Date().toISOString().slice(0, 10);
+  let filename = [job.site, ...terms, ...locations, stamp].filter(Boolean).join('_');
+  if (filename.length > 150) filename = filename.slice(0, 150);
+
   const a = document.createElement('a');
   a.href = url;
-  a.download = `leads_${Date.now()}.csv`;
+  a.download = `${filename}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();

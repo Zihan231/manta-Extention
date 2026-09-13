@@ -24,15 +24,28 @@
   // this script silently mid-page - the job would sit in "running" forever
   // with nothing left to report. Checking for this explicitly, up front,
   // turns that freeze into a clear "paused - solve it yourself" state.
+  // Markers must be specific phrasing that only ever shows up on an actual
+  // challenge page - single generic words like "blocked" or "security
+  // check" turned out to false-positive on ordinary page text (ad-blocker
+  // notices, cookie banners, unrelated copy) and paused runs that had no
+  // CAPTCHA on screen at all.
+  //
+  // No DOM widget check (iframe[src*="recaptcha"], .g-recaptcha, etc.) -
+  // that was removed after it flagged a normal Manta page: sites commonly
+  // embed a legitimate reCAPTCHA on an unrelated form (e.g. "contact this
+  // business" / "report listing") that has nothing to do with blocking the
+  // scrape. A real challenge page also shows one of the text phrases below,
+  // so the text check alone still catches genuine blocks.
   function looksLikeCaptcha(doc) {
     const text = (doc.body ? doc.body.innerText : '').toLowerCase().slice(0, 4000);
     const markers = [
-      'captcha', 'verify you are human', 'unusual traffic', 'are you a robot',
-      'checking your browser', 'security check', 'access denied', 'blocked'
+      'captcha', 'verify you are human', 'unusual traffic from your computer',
+      'unusual traffic from your network', 'are you a robot',
+      'checking your browser before accessing', 'please stand by, while we are checking',
+      'ddos protection by', 'attention required! | cloudflare',
+      'your access to this page has been denied', 'this website is using a security service'
     ];
-    if (markers.some(m => text.includes(m))) return true;
-    if (doc.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], #challenge-form, .g-recaptcha, #cf-challenge')) return true;
-    return false;
+    return markers.find(m => text.includes(m)) || null;
   }
 
   function pause(reason) {
@@ -161,8 +174,9 @@
 
     await delay(1200); // let the page finish its own initial render
 
-    if (looksLikeCaptcha(document)) {
-      pause('CAPTCHA / bot-check detected on ' + location.hostname + '. Solve it in this tab, then click Continue.');
+    const captchaHit = looksLikeCaptcha(document);
+    if (captchaHit) {
+      pause('CAPTCHA / bot-check detected on ' + location.hostname + ' (matched "' + captchaHit + '"). Solve it in this tab, then click Continue.');
       return;
     }
 

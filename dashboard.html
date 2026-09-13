@@ -85,7 +85,31 @@
   .config .hint { font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
   button.full { width: 100%; margin-top: 12px; padding: 10px 0; }
   button.full:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
-  .config.busy select, .config.busy textarea { opacity: .5; pointer-events: none; }
+  .config.busy select, .config.busy textarea, .config.busy input,
+  .config.busy .add-more, .config.busy .dyn-remove { opacity: .5; pointer-events: none; }
+
+  .dyn-list { display: flex; flex-direction: column; gap: 6px; }
+  .dyn-row { display: flex; gap: 6px; }
+  .dyn-row input {
+    flex: 1; min-width: 0; font-size: 12.5px; padding: 8px 10px;
+    border: 1.5px solid var(--border); border-radius: 8px; background: var(--panel);
+    color: var(--text); font-family: inherit;
+  }
+  .dyn-row input:focus {
+    outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+  }
+  .dyn-remove {
+    flex: none; width: 30px; padding: 0; font-size: 15px; font-weight: 700;
+    line-height: 1; color: var(--muted); border: 1.5px solid var(--border);
+    border-radius: 8px; background: var(--panel); cursor: pointer;
+  }
+  .dyn-remove:hover { background: var(--red-bg); color: var(--red); border-color: #fecdd3; }
+  button.add-more {
+    width: 100%; margin-top: 6px; padding: 7px 0; font-size: 11.5px;
+    font-weight: 700; color: var(--indigo); background: var(--blue-bg);
+    border: 1px dashed #c7cbfa;
+  }
+  button.add-more:hover { background: #e4e6ff; }
 
   .banner {
     display: none;
@@ -137,6 +161,13 @@
   button.primary:hover { box-shadow: 0 3px 14px rgba(79,70,229,.42); }
   button.danger { color: var(--red); border-color: #fecdd3; background: var(--red-bg); }
   button.danger:hover { background: #ffe1e6; }
+  /* Disabling a button via JS (e.g. Stop, once already stopped) previously
+     had no visual effect at all here - it still looked fully clickable,
+     which read as "did clicking that even do anything?" */
+  button:disabled {
+    opacity: .5; cursor: not-allowed; box-shadow: none; transform: none;
+    pointer-events: none;
+  }
 
   .listwrap { padding: 0 18px 18px; }
   .list-title { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin: 2px 0 7px; }
@@ -191,12 +222,14 @@
     </select>
 
     <label>Search terms</label>
-    <textarea id="terms" placeholder="restaurants&#10;dental&#10;plumbers"></textarea>
-    <div class="hint">One per line, or comma-separated.</div>
+    <div class="dyn-list" id="termsList"></div>
+    <button type="button" id="addTerm" class="add-more">+ Add search term</button>
+    <div class="hint">Every term runs in every location.</div>
 
     <label>Locations</label>
-    <textarea id="locations" placeholder="Toronto, ON, Canada&#10;Vancouver, BC, Canada"></textarea>
-    <div class="hint">One per line. Every term runs in every location. YellowPages non-.ca: prefix a line as "www.yellowpages.com.au|Sydney NSW".</div>
+    <div class="dyn-list" id="locationsList"></div>
+    <button type="button" id="addLocation" class="add-more">+ Add location</button>
+    <div class="hint">YellowPages non-.ca: prefix a location as "www.yellowpages.com.au|Sydney NSW".</div>
 
     <button id="start" class="primary full">Start</button>
     <div class="hint" id="startHint"></div>
