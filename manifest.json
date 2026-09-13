@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Local Biz Lead Scraper",
+  "version": "1.0.0",
+  "description": "Scrape business directories (Manta, YellowPages, generic) by keyword + location, auto-paginate, export CSV.",
+  "permissions": ["storage", "tabs", "downloads"],
+  "host_permissions": [
+    "https://www.manta.com/*",
+    "https://www.yellowpages.ca/*",
+    "https://www.yellowpages.com/*",
+    "https://www.yellowpages.com.au/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Lead Scraper"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["sites.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

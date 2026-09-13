@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Lead Scraper</title>
+<style>
+  :root {
+    --bg: #f3f4fc;
+    --panel: #ffffff;
+    --border: #e3e5f5;
+    --text: #1a1830;
+    --muted: #74739a;
+    --indigo: #4f46e5;
+    --violet: #8b5cf6;
+    --red: #e11d48;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    width: 380px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12.5px;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 14px 16px 12px;
+    background: linear-gradient(135deg, var(--indigo), var(--violet));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    box-shadow: 0 2px 10px rgba(79,70,229,.28);
+  }
+  header .logo {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: rgba(255,255,255,.2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  header h1 { font-size: 14.5px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+
+  .body { padding: 14px 16px 16px; }
+  label {
+    display: block; font-size: 11px; font-weight: 700; color: var(--text);
+    margin: 12px 0 5px; text-transform: uppercase; letter-spacing: .03em;
+  }
+  label:first-child { margin-top: 0; }
+  select, textarea, input {
+    width: 100%; box-sizing: border-box; font-size: 12.5px; padding: 8px 10px;
+    border: 1.5px solid var(--border); border-radius: 8px; background: var(--panel);
+    color: var(--text); font-family: inherit;
+  }
+  select:focus, textarea:focus, input:focus {
+    outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+  }
+  textarea { height: 56px; resize: vertical; line-height: 1.4; }
+  .hint { font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+
+  .row { display: flex; gap: 8px; margin-top: 14px; }
+  button {
+    flex: 1; padding: 9px 0; font-size: 12.5px; font-weight: 700;
+    border-radius: 8px; border: 1.5px solid var(--border);
+    background: var(--panel); cursor: pointer; color: var(--text);
+    transition: transform .05s ease, box-shadow .15s ease;
+  }
+  button:active { transform: scale(.98); }
+  button.primary { background: linear-gradient(135deg, var(--indigo), var(--violet)); color: #fff; border: none; box-shadow: 0 2px 10px rgba(79,70,229,.32); }
+  button.primary:hover { box-shadow: 0 3px 14px rgba(79,70,229,.42); }
+  button.ghost:hover { background: #f4f4fb; }
+  button.danger-ghost { color: var(--red); border-color: #fecdd3; }
+  button.danger-ghost:hover { background: #fff1f3; }
+
+  #status {
+    margin-top: 12px; font-size: 11px; color: var(--muted); line-height: 1.5;
+    background: #f4f4fb; padding: 9px 10px; border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="white" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+    <h1>Local Biz Lead Scraper</h1>
+  </header>
+
+  <div class="body">
+    <label>Site</label>
+    <select id="site">
+      <option value="manta">Manta.com</option>
+      <option value="yellowpages">YellowPages (.ca default)</option>
+      <option value="generic">Generic (scrape current tab as-is)</option>
+    </select>
+
+    <label>Search terms</label>
+    <textarea id="terms" placeholder="restaurants&#10;dental&#10;plumbers"></textarea>
+    <div class="hint">One per line, or comma-separated.</div>
+
+    <label>Locations</label>
+    <textarea id="locations" placeholder="Toronto, ON, Canada&#10;Vancouver, BC, Canada"></textarea>
+    <div class="hint">One per line. Every term runs in every location. YellowPages non-.ca: prefix a line as "www.yellowpages.com.au|Sydney NSW".</div>
+
+    <div class="row">
+      <button id="start" class="primary">Start</button>
+      <button id="dashboard" class="ghost">Open Dashboard</button>
+    </div>
+    <div class="row">
+      <button id="clear" class="danger-ghost">Clear results</button>
+    </div>
+
+    <div id="status">Live progress, pause-on-CAPTCHA, and CSV export are on the Dashboard window — this popup closes as soon as you click away, so it can't show real-time state.</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
